@@ -2,45 +2,68 @@
 class Ball {
     constructor(x, y) {
         this.pos = createVector(x, y);
-        this.vel = createVector(random(-3, -1.8), -6); // Initial serve velocity (0.6배 감소)
-        this.radius = 36.4; // 28 * 1.3 = 36.4 (30% 증가)
-        this.gravity = 0.4; // 중력 감소 (더 천천히 떨어짐)
+        // Initial serve velocity - 스케일 적용하여 초기화
+        this.vel = createVector(random(-3, -1.8) * gameScale, -6 * gameScale);
+        this.radius = 36.4; // 28 * 1.3 = 36.4 (30% 증가) - 기준값
+        this.gravity = 0.4; // 중력 기준값 (update에서 gameScale 적용)
         this.bounceCoefficient = 0.75; // 바운스 증가
-        this.maxSpeed = 19.5; // 최고 속도 제한 (15 * 1.3 = 19.5)
+        this.maxSpeed = 19.5; // 최고 속도 제한 기준값 (update에서 gameScale 적용)
+        this.trail = []; // 잔상 저장 배열
+        this.maxTrailLength = 8; // 최대 잔상 개수
+        this.crashEffects = []; // 충돌 이펙트 배열
+        this.lastCollisionTime = 0; // 마지막 충돌 시간 (쿨다운용)
+        this.collisionCooldown = 200; // 충돌 쿨다운 시간 (ms)
     }
 
     // Apply physics
     update() {
-        // Apply gravity
-        this.vel.y += this.gravity;
+        // 충돌 이펙트 업데이트 (시간 경과로 페이드 아웃)
+        for (let i = this.crashEffects.length - 1; i >= 0; i--) {
+            this.crashEffects[i].timer--;
+            if (this.crashEffects[i].timer <= 0) {
+                this.crashEffects.splice(i, 1); // 시간 지난 이펙트 제거
+            }
+        }
 
-        // 최고 속도 제한
+        // 현재 위치를 잔상 배열에 추가
+        this.trail.push(createVector(this.pos.x, this.pos.y));
+
+        // 잔상 길이 제한
+        if (this.trail.length > this.maxTrailLength) {
+            this.trail.shift(); // 가장 오래된 잔상 제거
+        }
+
+        // Apply gravity (스케일 적용)
+        this.vel.y += this.gravity * gameScale;
+
+        // 최고 속도 제한 (스케일 적용)
         const speed = this.vel.mag();
-        if (speed > this.maxSpeed) {
-            this.vel.setMag(this.maxSpeed);
+        if (speed > this.maxSpeed * gameScale) {
+            this.vel.setMag(this.maxSpeed * gameScale);
         }
 
         // Update position
         this.pos.add(this.vel);
 
-        // Check floor collision
-        if (this.pos.y + this.radius >= height - 50) {
+        // Check floor collision (스케일 적용)
+        const floorY = height - 50 * gameScale;
+        if (this.pos.y + this.radius * gameScale >= floorY) {
             return this.handleFloorCollision();
         }
 
-        // Check ceiling collision
-        if (this.pos.y - this.radius <= 0) {
-            this.pos.y = this.radius;
+        // Check ceiling collision (스케일 적용)
+        if (this.pos.y - this.radius * gameScale <= 0) {
+            this.pos.y = this.radius * gameScale;
             this.vel.y *= -this.bounceCoefficient;
         }
 
-        // Check side walls (prevent out of bounds)
-        if (this.pos.x - this.radius <= 0) {
-            this.pos.x = this.radius;
+        // Check side walls (스케일 적용)
+        if (this.pos.x - this.radius * gameScale <= 0) {
+            this.pos.x = this.radius * gameScale;
             this.vel.x *= -1;
         }
-        if (this.pos.x + this.radius >= width) {
-            this.pos.x = width - this.radius;
+        if (this.pos.x + this.radius * gameScale >= width) {
+            this.pos.x = width - this.radius * gameScale;
             this.vel.x *= -1;
         }
 
@@ -49,7 +72,8 @@ class Ball {
 
     // Handle floor collision and return which player scored
     handleFloorCollision() {
-        this.pos.y = height - 50 - this.radius;
+        const floorY = height - 50 * gameScale;
+        this.pos.y = floorY - this.radius * gameScale;
         this.vel.y *= -this.bounceCoefficient;
 
         // Determine which side the ball landed on
@@ -63,20 +87,21 @@ class Ball {
     // Check collision with net
     checkNetCollision() {
         const netX = width / 2;
-        const netWidth = 20; // 네트 두께
-        const netHeight = 240; // 200 * 1.2 = 240 (20% 증가)
+        const netWidth = 20 * gameScale; // 네트 두께 (스케일 적용)
+        const netHeight = 240 * gameScale; // 네트 높이 (스케일 적용)
+        const floorOffset = 50 * gameScale; // 바닥 오프셋 (스케일 적용)
 
         // If ball is passing through net area
-        if (abs(this.pos.x - netX) < this.radius + netWidth / 2) {
-            if (this.pos.y > height - 50 - netHeight) {
+        if (abs(this.pos.x - netX) < this.radius * gameScale + netWidth / 2) {
+            if (this.pos.y > height - floorOffset - netHeight) {
                 // Ball hits net - bounce back
                 this.vel.x *= -0.8; // x 방향 반전 (80% 속도로)
 
                 // 네트 중심에서 밀어냄
                 if (this.pos.x < netX) {
-                    this.pos.x = netX - this.radius - netWidth / 2 - 5; // 왼쪽으로 밀어냄
+                    this.pos.x = netX - this.radius * gameScale - netWidth / 2 - 5 * gameScale; // 왼쪽으로 밀어냄
                 } else {
-                    this.pos.x = netX + this.radius + netWidth / 2 + 5; // 오른쪽으로 밀어냄
+                    this.pos.x = netX + this.radius * gameScale + netWidth / 2 + 5 * gameScale; // 오른쪽으로 밀어냄
                 }
 
                 // y 속도 약간 감소 (마찰 효과)
@@ -86,24 +111,26 @@ class Ball {
     }
 
     // Check collision with player hands
-    checkHandCollision(player1Hands, player2Hands) {
-        // 동적 충돌 거리 계산: 플레이어 반지름(42) + 공 반지름(36.4) = 78.4
-        const playerRadius = 42; // 플레이어 점 지름 84px / 2
-        const collisionDistance = playerRadius + this.radius; // 42 + 36.4 = 78.4
-
+    checkHandCollision(player1Hands, player2Hands, player1, player2) {
         // Check Player 1 hands (left side)
+        const player1Radius = player1.getRadius();
+        const collisionDistance1 = player1Radius + this.radius * gameScale;
+
         for (let hand of player1Hands) {
             const d = dist(this.pos.x, this.pos.y, hand.x, hand.y);
-            if (d < collisionDistance) {
+            if (d < collisionDistance1) {
                 this.hitByHand(hand.x);
                 return;
             }
         }
 
         // Check Player 2 hands (right side)
+        const player2Radius = player2.getRadius();
+        const collisionDistance2 = player2Radius + this.radius * gameScale;
+
         for (let hand of player2Hands) {
             const d = dist(this.pos.x, this.pos.y, hand.x, hand.y);
-            if (d < collisionDistance) {
+            if (d < collisionDistance2) {
                 this.hitByHand(hand.x);
                 return;
             }
@@ -112,12 +139,34 @@ class Ball {
 
     // Ball hit by hand
     hitByHand(handX) {
+        // 쿨다운 체크 - 마지막 충돌로부터 200ms 이상 경과했는지 확인
+        const currentTime = millis();
+        if (currentTime - this.lastCollisionTime < this.collisionCooldown) {
+            return; // 쿨다운 중이면 충돌 처리 안함
+        }
+
+        // 쿨다운 타이머 갱신
+        this.lastCollisionTime = currentTime;
+
+        // Play crash sound
+        if (crashSound) {
+            crashSound.play();
+        }
+
+        // 충돌 이펙트 추가
+        this.crashEffects.push({
+            x: this.pos.x,
+            y: this.pos.y,
+            timer: 20, // 20 프레임 동안 표시 (약 0.33초)
+            maxTimer: 20
+        });
+
         // Reverse x direction with some randomness
         const multiplier = random(1.2, 1.5);
         this.vel.x *= -multiplier;
 
-        // Fixed upward velocity (더 강하게)
-        this.vel.y = -10;
+        // Fixed upward velocity (스케일 적용)
+        this.vel.y = -10 * gameScale;
 
         // Add horizontal component based on hand position
         if (handX < width / 2) {
@@ -132,25 +181,52 @@ class Ball {
     // Serve the ball from specified side
     serve(fromRight = false) {
         if (fromRight) {
-            this.pos = createVector(width * 0.75, 100);
-            this.vel = createVector(random(-5, -3), -8);
+            this.pos = createVector(width * 0.75, 100 * gameScale); // 스케일 적용
+            this.vel = createVector(random(-5, -3) * gameScale, -8 * gameScale); // 스케일 적용
         } else {
-            this.pos = createVector(width * 0.25, 100);
-            this.vel = createVector(random(3, 5), -8);
+            this.pos = createVector(width * 0.25, 100 * gameScale); // 스케일 적용
+            this.vel = createVector(random(3, 5) * gameScale, -8 * gameScale); // 스케일 적용
         }
+        // 서브 시 잔상 초기화
+        this.trail = [];
     }
 
     // Draw the ball
     display() {
         push();
+
+        // Draw crash effects (충돌 이펙트)
+        for (let effect of this.crashEffects) {
+            const alpha = map(effect.timer, 0, effect.maxTimer, 0, 255); // 시간에 따라 페이드 아웃
+            const size = map(effect.timer, effect.maxTimer, 0, 80 * gameScale, 120 * gameScale); // 스케일 적용
+
+            tint(255, alpha);
+            imageMode(CENTER);
+            image(crashImage, effect.x, effect.y, size, size);
+        }
+
+        noTint(); // tint 리셋
+
+        // Draw trail (잔상)
+        for (let i = 0; i < this.trail.length; i++) {
+            const alpha = map(i, 0, this.trail.length - 1, 0, 150); // 투명도 점진적 증가
+            const size = map(i, 0, this.trail.length - 1, this.radius * 0.5 * gameScale, this.radius * 2 * gameScale); // 스케일 적용
+
+            tint(255, alpha); // 투명도 적용
+            imageMode(CENTER);
+            image(ballImage, this.trail[i].x, this.trail[i].y, size, size);
+        }
+
+        noTint(); // tint 리셋
+
         // Shadow
         fill(0, 0, 0, 50);
         noStroke();
-        ellipse(this.pos.x + 5, this.pos.y + 5, this.radius * 2);
+        ellipse(this.pos.x + 5 * gameScale, this.pos.y + 5 * gameScale, this.radius * 2 * gameScale); // 스케일 적용
 
-        // Ball image
+        // Ball image (현재 위치)
         imageMode(CENTER);
-        image(ballImage, this.pos.x, this.pos.y, this.radius * 2, this.radius * 2);
+        image(ballImage, this.pos.x, this.pos.y, this.radius * 2 * gameScale, this.radius * 2 * gameScale); // 스케일 적용
         pop();
     }
 

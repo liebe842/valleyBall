@@ -5,16 +5,50 @@ let poses = [];
 let game;
 let isModelReady = false;
 let ballImage;
+let noseImage;
+let noseImage2;
+let crashImage;
+let crashSound;
+let pointSound;
+let gameoverSound;
+let gameScale = 1; // 게임 스케일 (기준: 800x600)
 
 function preload() {
     // Load ball image
     ballImage = loadImage('ball.png');
+    // Load nose images
+    noseImage = loadImage('해로.png');
+    noseImage2 = loadImage('해로1.png');
+    // Load crash image
+    crashImage = loadImage('crash.png');
+    // Load crash sound
+    crashSound = loadSound('crash.mp3');
+    // Load point sound
+    pointSound = loadSound('point.mp3');
+    // Load gameover sound
+    gameoverSound = loadSound('gameover.mp3');
 }
 
 function setup() {
-    // Create canvas
-    const canvas = createCanvas(800, 600);
+    // Create responsive canvas with aspect ratio 4:3
+    const aspectRatio = 4 / 3;
+    let canvasWidth, canvasHeight;
+
+    if (windowWidth / windowHeight > aspectRatio) {
+        // 창이 더 넓음 - 높이 기준으로 맞춤
+        canvasHeight = windowHeight;
+        canvasWidth = canvasHeight * aspectRatio;
+    } else {
+        // 창이 더 좁음 - 너비 기준으로 맞춤
+        canvasWidth = windowWidth;
+        canvasHeight = canvasWidth / aspectRatio;
+    }
+
+    const canvas = createCanvas(canvasWidth, canvasHeight);
     canvas.parent('canvas-container');
+
+    // Calculate game scale (base width: 800)
+    gameScale = canvasWidth / 800;
 
     // Create video capture
     video = createCapture(VIDEO);
@@ -36,7 +70,7 @@ function setup() {
     poseNet.on('pose', gotPoses);
 
     // Initialize game
-    game = new Game();
+    game = new Game(noseImage, noseImage2);
 }
 
 function modelReady() {
@@ -75,10 +109,6 @@ function draw() {
     // Update and display game
     game.update();
     game.display();
-
-    // Draw FPS counter and debug info
-    drawFPS();
-    drawDebugInfo();
 }
 
 function drawLoadingScreen() {
@@ -166,5 +196,34 @@ function keyPressed() {
         console.log('Player 2 detected:', game.player2.detected());
         console.log('Game state:', game.state);
         console.log('Scores:', game.player1Score, '-', game.player2Score);
+    }
+}
+
+// Window resize handler
+function windowResized() {
+    // Maintain aspect ratio 4:3
+    const aspectRatio = 4 / 3;
+    let canvasWidth, canvasHeight;
+
+    if (windowWidth / windowHeight > aspectRatio) {
+        // 창이 더 넓음 - 높이 기준으로 맞춤
+        canvasHeight = windowHeight;
+        canvasWidth = canvasHeight * aspectRatio;
+    } else {
+        // 창이 더 좁음 - 너비 기준으로 맞춤
+        canvasWidth = windowWidth;
+        canvasHeight = canvasWidth / aspectRatio;
+    }
+
+    resizeCanvas(canvasWidth, canvasHeight);
+    video.size(width, height);
+
+    // Recalculate game scale
+    gameScale = canvasWidth / 800;
+
+    // Update game zones with new scale
+    if (game) {
+        game.startZone1.radius = 100 * gameScale;
+        game.startZone2.radius = 100 * gameScale;
     }
 }

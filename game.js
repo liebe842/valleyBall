@@ -1,13 +1,16 @@
 // Game class - manages game state, scoring, and flow
 class Game {
-    constructor() {
+    constructor(noseImage, noseImage2) {
         this.state = 'WAITING'; // WAITING, READY, PLAYING, WIN
         this.player1Score = 0;
         this.player2Score = 0;
         this.winScore = 15;
         this.ball = null;
-        this.player1 = new Player(1);
-        this.player2 = new Player(2);
+        this.noseImage = noseImage;
+        this.noseImage2 = noseImage2;
+        this.player1 = new Player(1, noseImage);
+        this.player2 = new Player(2, noseImage2);
+        this.player2.charSize = 220; // Player 2 이미지 크기 조정 (168 -> 220)
         this.lastScorer = 0; // Who scored last (for serve)
         this.winTimer = 0;
         this.winCountdown = 3; // seconds
@@ -18,45 +21,50 @@ class Game {
         this.hasStartedOnce = false; // 한번이라도 시작했는지 체크
 
         // 시작 영역 (원)
-        this.startZone1 = { x: width * 0.25, y: height / 2, radius: 100 }; // 왼쪽 영역
-        this.startZone2 = { x: width * 0.75, y: height / 2, radius: 100 }; // 오른쪽 영역
+        this.startZone1 = { x: width * 0.25, y: height / 2, radius: 100 * gameScale }; // 왼쪽 영역 (스케일 적용)
+        this.startZone2 = { x: width * 0.75, y: height / 2, radius: 100 * gameScale }; // 오른쪽 영역 (스케일 적용)
         this.player1InZone = false;
         this.player2InZone = false;
     }
 
     // Initialize ball
     init() {
-        this.ball = new Ball(width / 2, 100);
+        this.ball = new Ball(width / 2, 100 * gameScale); // 스케일 적용
         this.ball.serve(random() > 0.5); // Random initial serve
     }
 
     // Check if player is in start zone
     checkPlayerInZone(player, zone) {
-        if (!player.detected() || player.hands.length === 0) return false;
-        const hand = player.hands[0];
-        const distance = dist(hand.x, hand.y, zone.x, zone.y);
+        if (!player.detected() || !player.position) return false;
+        const distance = dist(player.position.x, player.position.y, zone.x, zone.y);
         return distance < zone.radius;
     }
 
     // Update game state
     update() {
         if (this.state === 'WAITING') {
-            // Check if both players are detected
-            if (this.player1.detected() && this.player2.detected()) {
-                // 시작 영역 체크
+            // 각 플레이어 개별 체크
+            if (this.player1.detected()) {
                 this.player1InZone = this.checkPlayerInZone(this.player1, this.startZone1);
-                this.player2InZone = this.checkPlayerInZone(this.player2, this.startZone2);
+            } else {
+                this.player1InZone = false;
+            }
 
-                // 둘 다 영역 안에 있으면 READY 시작
-                if (this.player1InZone && this.player2InZone) {
-                    if (!this.hasStartedOnce) {
-                        // 처음 시작할 때만 READY 화면
-                        this.state = 'READY';
-                        this.readyTimer = 0;
-                    } else {
-                        // 이미 시작한 적 있으면 바로 시작
-                        this.startGame();
-                    }
+            if (this.player2.detected()) {
+                this.player2InZone = this.checkPlayerInZone(this.player2, this.startZone2);
+            } else {
+                this.player2InZone = false;
+            }
+
+            // 둘 다 영역 안에 있으면 READY 시작
+            if (this.player1InZone && this.player2InZone) {
+                if (!this.hasStartedOnce) {
+                    // 처음 시작할 때만 READY 화면
+                    this.state = 'READY';
+                    this.readyTimer = 0;
+                } else {
+                    // 이미 시작한 적 있으면 바로 시작
+                    this.startGame();
                 }
             }
         } else if (this.state === 'READY') {
@@ -84,7 +92,9 @@ class Game {
             // Check hand collisions
             this.ball.checkHandCollision(
                 this.player1.getHands(),
-                this.player2.getHands()
+                this.player2.getHands(),
+                this.player1,
+                this.player2
             );
 
             // Handle scoring
@@ -119,6 +129,10 @@ class Game {
     endGameByTime() {
         this.state = 'WIN';
         this.winTimer = 0;
+        // Play gameover sound
+        if (gameoverSound) {
+            gameoverSound.play();
+        }
         // 점수가 높은 사람이 승리, 동점이면 무승부
     }
 
@@ -132,13 +146,26 @@ class Game {
             this.lastScorer = 2;
         }
 
+        // Play point sound
+        if (pointSound) {
+            pointSound.play();
+        }
+
         // Check for win condition
         if (this.player1Score >= this.winScore) {
             this.state = 'WIN';
             this.winTimer = 0;
+            // Play gameover sound
+            if (gameoverSound) {
+                gameoverSound.play();
+            }
         } else if (this.player2Score >= this.winScore) {
             this.state = 'WIN';
             this.winTimer = 0;
+            // Play gameover sound
+            if (gameoverSound) {
+                gameoverSound.play();
+            }
         } else {
             // Serve from scorer's side
             this.ball.reset(this.lastScorer === 2);
@@ -247,19 +274,20 @@ class Game {
     // Draw net
     drawNet() {
         push();
-        const netHeight = 240; // 200 * 1.2 = 240 (20% 증가)
-        const netWidth = 20; // 네트 두께
+        const netHeight = 240 * gameScale; // 스케일 적용
+        const netWidth = 20 * gameScale; // 스케일 적용
+        const floorOffset = 50 * gameScale; // 스케일 적용
 
         // Draw thick net
         fill(255);
         noStroke();
-        rect(width / 2 - netWidth / 2, height - 50 - netHeight, netWidth, netHeight);
+        rect(width / 2 - netWidth / 2, height - floorOffset - netHeight, netWidth, netHeight);
 
         // Net pattern
         stroke(100);
-        strokeWeight(2);
-        for (let i = 0; i < netHeight; i += 20) {
-            line(width / 2 - netWidth / 2, height - 50 - i, width / 2 + netWidth / 2, height - 50 - i);
+        strokeWeight(2 * gameScale); // 스케일 적용
+        for (let i = 0; i < netHeight; i += 20 * gameScale) { // 스케일 적용
+            line(width / 2 - netWidth / 2, height - floorOffset - i, width / 2 + netWidth / 2, height - floorOffset - i);
         }
         pop();
     }
@@ -268,8 +296,8 @@ class Game {
     drawFloor() {
         push();
         stroke(255);
-        strokeWeight(3);
-        line(0, height - 50, width, height - 50);
+        strokeWeight(3 * gameScale); // 스케일 적용
+        line(0, height - 50 * gameScale, width, height - 50 * gameScale); // 스케일 적용
         pop();
     }
 
@@ -278,9 +306,9 @@ class Game {
         push();
         fill(255);
         textAlign(CENTER, CENTER);
-        textSize(32);
+        textSize(32 * gameScale); // 스케일 적용
         textStyle(BOLD);
-        text(`P1: ${this.player1Score}  |  P2: ${this.player2Score}`, width / 2, 40);
+        text(`P1: ${this.player1Score}  |  P2: ${this.player2Score}`, width / 2, 40 * gameScale); // 스케일 적용
         pop();
     }
 
@@ -291,7 +319,7 @@ class Game {
         rect(0, 0, width, height);
 
         // Draw start zones (circles)
-        strokeWeight(5);
+        strokeWeight(5 * gameScale); // 스케일 적용
         noFill();
 
         // Zone 1 (Left)
@@ -318,31 +346,31 @@ class Game {
         fill(255);
         noStroke();
         textAlign(CENTER, CENTER);
-        textSize(32);
+        textSize(32 * gameScale); // 스케일 적용
         textStyle(BOLD);
 
         const p1Status = this.player1.detected() ? '✓' : '✗';
         const p2Status = this.player2.detected() ? '✓' : '✗';
 
-        text('Enter the Circles!', width / 2, 60);
+        text('Enter the Circles!', width / 2, 60 * gameScale); // 스케일 적용
 
-        textSize(20);
+        textSize(20 * gameScale); // 스케일 적용
         textStyle(NORMAL);
-        text(`Player 1: ${p1Status}`, width / 2, 110);
-        text(`Player 2: ${p2Status}`, width / 2, 140);
+        text(`Player 1: ${p1Status}`, width / 2, 110 * gameScale); // 스케일 적용
+        text(`Player 2: ${p2Status}`, width / 2, 140 * gameScale); // 스케일 적용
 
         // Zone status
         if (this.player1.detected() && this.player2.detected()) {
-            textSize(18);
+            textSize(18 * gameScale); // 스케일 적용
             if (this.player1InZone && this.player2InZone) {
                 fill(0, 255, 0);
-                text('Both Ready! Starting...', width / 2, height - 60);
+                text('Both Ready! Starting...', width / 2, height - 60 * gameScale); // 스케일 적용
             } else {
                 fill(255, 255, 0);
                 let msg = '';
                 if (!this.player1InZone) msg += 'P1 enter left circle  ';
                 if (!this.player2InZone) msg += 'P2 enter right circle';
-                text(msg, width / 2, height - 60);
+                text(msg, width / 2, height - 60 * gameScale); // 스케일 적용
             }
         }
         pop();
@@ -356,7 +384,7 @@ class Game {
 
         fill(255, 215, 0);
         textAlign(CENTER, CENTER);
-        textSize(64);
+        textSize(64 * gameScale); // 스케일 적용
         textStyle(BOLD);
 
         const countdown = Math.ceil(this.readyCountdown - (this.readyTimer / 60));
@@ -366,9 +394,9 @@ class Game {
             text('GO!', width / 2, height / 2);
         }
 
-        textSize(24);
+        textSize(24 * gameScale); // 스케일 적용
         fill(255);
-        text('Get Ready!', width / 2, height / 2 - 80);
+        text('Get Ready!', width / 2, height / 2 - 80 * gameScale); // 스케일 적용
         pop();
     }
 
@@ -377,11 +405,11 @@ class Game {
         push();
         fill(255, 255, 0);
         textAlign(RIGHT, TOP);
-        textSize(20);
+        textSize(20 * gameScale); // 스케일 적용
         textStyle(BOLD);
 
         const remainingSeconds = Math.ceil((this.gameTimeLimit - this.gameTimer) / 60);
-        text(`Time: ${remainingSeconds}s`, width - 20, 10);
+        text(`Time: ${remainingSeconds}s`, width - 20 * gameScale, 10 * gameScale); // 스케일 적용
         pop();
     }
 
@@ -393,7 +421,7 @@ class Game {
 
         fill(255, 215, 0);
         textAlign(CENTER, CENTER);
-        textSize(48);
+        textSize(48 * gameScale); // 스케일 적용
         textStyle(BOLD);
 
         // 점수로 승자 결정
@@ -407,17 +435,17 @@ class Game {
         }
 
         if (winner === 0) {
-            text('Draw!', width / 2, height / 2 - 40);
+            text('Draw!', width / 2, height / 2 - 40 * gameScale); // 스케일 적용
         } else {
-            text(`Player ${winner} Wins!`, width / 2, height / 2 - 40);
+            text(`Player ${winner} Wins!`, width / 2, height / 2 - 40 * gameScale); // 스케일 적용
         }
 
-        textSize(24);
+        textSize(24 * gameScale); // 스케일 적용
         fill(255);
-        text(`Final Score: ${this.player1Score} - ${this.player2Score}`, width / 2, height / 2 + 10);
+        text(`Final Score: ${this.player1Score} - ${this.player2Score}`, width / 2, height / 2 + 10 * gameScale); // 스케일 적용
 
         const countdown = Math.ceil(this.winCountdown - (this.winTimer / 60));
-        text(`Restarting in ${countdown}...`, width / 2, height / 2 + 60);
+        text(`Restarting in ${countdown}...`, width / 2, height / 2 + 60 * gameScale); // 스케일 적용
         pop();
     }
 }
