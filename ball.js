@@ -7,12 +7,15 @@ class Ball {
         this.radius = 36.4; // 28 * 1.3 = 36.4 (30% 증가) - 기준값
         this.gravity = 0.4; // 중력 기준값 (update에서 gameScale 적용)
         this.bounceCoefficient = 0.75; // 바운스 증가
-        this.maxSpeed = 19.5; // 최고 속도 제한 기준값 (update에서 gameScale 적용)
+        this.maxSpeed = 21; // 최고 속도 제한 기준값 (update에서 gameScale 적용)
         this.trail = []; // 잔상 저장 배열
         this.maxTrailLength = 8; // 최대 잔상 개수
         this.crashEffects = []; // 충돌 이펙트 배열
         this.lastCollisionTime = 0; // 마지막 충돌 시간 (쿨다운용)
         this.collisionCooldown = 200; // 충돌 쿨다운 시간 (ms)
+        this.isServing = false; // 서브 대기 상태
+        this.serveSide = 0; // 0: none, 1: left, 2: right
+        this.servePos = null; // 서브 위치
     }
 
     // Apply physics
@@ -23,6 +26,15 @@ class Ball {
             if (this.crashEffects[i].timer <= 0) {
                 this.crashEffects.splice(i, 1); // 시간 지난 이펙트 제거
             }
+        }
+
+        // 서브 대기 중이면 물리 엔진 적용 안함
+        if (this.isServing) {
+            // 서브 위치에 공 고정
+            if (this.servePos) {
+                this.pos = this.servePos.copy();
+            }
+            return null;
         }
 
         // 현재 위치를 잔상 배열에 추가
@@ -161,31 +173,57 @@ class Ball {
             maxTimer: 20
         });
 
-        // Reverse x direction with some randomness
-        const multiplier = random(1.2, 1.5);
-        this.vel.x *= -multiplier;
+        // 서브 대기 중이면 서브 시작
+        if (this.isServing) {
+            this.isServing = false;
+
+            // 서브 방향 결정
+            if (this.serveSide === 1) {
+                // 왼쪽 플레이어 서브 - 오른쪽으로
+                this.vel.x = random(3, 5) * gameScale;
+                this.vel.y = -8 * gameScale;
+            } else if (this.serveSide === 2) {
+                // 오른쪽 플레이어 서브 - 왼쪽으로
+                this.vel.x = random(-5, -3) * gameScale;
+                this.vel.y = -8 * gameScale;
+            }
+
+            // 잔상 초기화
+            this.trail = [];
+            return;
+        }
 
         // Fixed upward velocity (스케일 적용)
         this.vel.y = -10 * gameScale;
 
-        // Add horizontal component based on hand position
-        if (handX < width / 2) {
-            // Left player hit - push right
-            this.vel.x = abs(this.vel.x);
+        // 공의 위치와 손의 위치를 비교하여 방향 결정
+        const ballRelativeToHand = this.pos.x - handX;
+
+        if (ballRelativeToHand > 0) {
+            // 공이 손보다 오른쪽에 있음 - 오른쪽으로 튕김
+            this.vel.x = abs(this.vel.x) * random(1.2, 1.5);
         } else {
-            // Right player hit - push left
-            this.vel.x = -abs(this.vel.x);
+            // 공이 손보다 왼쪽에 있음 - 왼쪽으로 튕김
+            this.vel.x = -abs(this.vel.x) * random(1.2, 1.5);
         }
     }
 
     // Serve the ball from specified side
     serve(fromRight = false) {
+        // 서브 대기 상태로 설정
+        this.isServing = true;
+        this.vel = createVector(0, 0); // 속도 초기화
+
         if (fromRight) {
-            this.pos = createVector(width * 0.75, 100 * gameScale); // 스케일 적용
-            this.vel = createVector(random(-5, -3) * gameScale, -8 * gameScale); // 스케일 적용
+            // 오른쪽 플레이어 서브 위치
+            this.serveSide = 2;
+            this.servePos = createVector(width * 0.75, height * 0.35); // 높이 조정 (0.5 -> 0.35)
+            this.pos = this.servePos.copy();
         } else {
-            this.pos = createVector(width * 0.25, 100 * gameScale); // 스케일 적용
-            this.vel = createVector(random(3, 5) * gameScale, -8 * gameScale); // 스케일 적용
+            // 왼쪽 플레이어 서브 위치
+            this.serveSide = 1;
+            this.servePos = createVector(width * 0.25, height * 0.35); // 높이 조정 (0.5 -> 0.35)
+            this.pos = this.servePos.copy();
         }
         // 서브 시 잔상 초기화
         this.trail = [];

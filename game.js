@@ -257,6 +257,9 @@ class Game {
         if (this.state === 'PLAYING') {
             this.drawGameTimer();
         }
+
+        // Draw developer info
+        this.drawDeveloperInfo();
     }
 
     // Draw court
@@ -446,6 +449,17 @@ class Game {
 
         const countdown = Math.ceil(this.winCountdown - (this.winTimer / 60));
         text(`Restarting in ${countdown}...`, width / 2, height / 2 + 60 * gameScale); // 스케일 적용
+        pop();
+    }
+
+    // Draw developer info
+    drawDeveloperInfo() {
+        push();
+        fill(255, 255, 255, 150); // 반투명 흰색
+        textAlign(RIGHT, BOTTOM);
+        textSize(12 * gameScale); // 작은 크기
+        textStyle(NORMAL);
+        text('Developed by 유경윤 (인천부내초)', width - 10 * gameScale, height - 10 * gameScale);
         pop();
     }
 }
